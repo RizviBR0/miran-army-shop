@@ -1,0 +1,22 @@
+{
+  "name": "Miran Army",
+  "short_name": "Miran Army",
+  "description": "The #1 Fan Community - Discover cute and fun products curated just for fans",
+  "icons": [
+    {
+      "src": "/logo/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#FDE047",
+  "background_color": "#FFFDF7",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/"
+}
