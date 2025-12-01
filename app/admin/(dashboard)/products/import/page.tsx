@@ -138,6 +138,13 @@ export default function ImportProductsPage() {
   // Duplicate tracking
   const [duplicateCount, setDuplicateCount] = useState(0);
 
+  // Update existing products category
+  const [updatingCategory, setUpdatingCategory] = useState(false);
+  const [updateResult, setUpdateResult] = useState<{
+    updated: number;
+    skipped: number;
+  } | null>(null);
+
   // Fetch categories on mount
   useEffect(() => {
     const fetchCategories = async () => {
@@ -345,35 +352,53 @@ export default function ImportProductsPage() {
       }
 
       // Insert new product
-      const { error } = await supabase.from("products").insert({
-        external_id: product.external_id,
-        title: product.title,
-        short_desc: product.short_desc,
-        image_url: product.image_url,
-        ali_url: product.affiliate_url,
-        affiliate_url: product.affiliate_url,
-        price: product.price,
-        original_price: product.original_price,
-        currency: product.currency,
-        discount_percent: product.discount_percent,
-        sales_count: product.sales_count,
-        positive_feedback: product.rating * 20, // Convert 5-star back to percentage
-        rating: product.rating,
-        video_url: product.video_url || null,
-        store_name: null,
-        is_hot: product.sales_count > 1000,
-        is_featured: product.discount_percent >= 20, // Feature products with 20%+ discount
-        status: "DRAFT",
-        coupon_code: product.coupon_code || null,
-        coupon_value: product.coupon_value || null,
-        coupon_min_spend: product.coupon_min_spend || null,
-        coupon_end_date: product.coupon_end_date || null,
-      });
+      const { data: insertedProduct, error } = await supabase
+        .from("products")
+        .insert({
+          external_id: product.external_id,
+          title: product.title,
+          short_desc: product.short_desc,
+          image_url: product.image_url,
+          ali_url: product.affiliate_url,
+          affiliate_url: product.affiliate_url,
+          price: product.price,
+          original_price: product.original_price,
+          currency: product.currency,
+          discount_percent: product.discount_percent,
+          sales_count: product.sales_count,
+          positive_feedback: product.rating * 20, // Convert 5-star back to percentage
+          rating: product.rating,
+          video_url: product.video_url || null,
+          store_name: null,
+          is_hot: product.sales_count > 1000,
+          is_featured: product.discount_percent >= 20, // Feature products with 20%+ discount
+          status: "DRAFT",
+          coupon_code: product.coupon_code || null,
+          coupon_value: product.coupon_value || null,
+          coupon_min_spend: product.coupon_min_spend || null,
+          coupon_end_date: product.coupon_end_date || null,
+        })
+        .select("id")
+        .single();
 
-      if (error) {
+      if (error || !insertedProduct) {
         console.error("Error inserting product:", error);
         failed++;
       } else {
+        // Link product to category in junction table
+        if (selectedCategoryId) {
+          const { error: linkError } = await supabase
+            .from("product_categories")
+            .insert({
+              product_id: insertedProduct.id,
+              category_id: selectedCategoryId,
+            });
+
+          if (linkError) {
+            console.error("Error linking product to category:", linkError);
+            // Product was inserted but category link failed - still count as success
+          }
+        }
         success++;
       }
     }
@@ -390,6 +415,75 @@ export default function ImportProductsPage() {
 
   const handleCancel = () => {
     cancelRef.current = true;
+  };
+
+  // Function to add category to products in the uploaded Excel file
+  // Products can have multiple categories - this adds the selected category if not already assigned
+  const handleUpdateExistingCategory = async () => {
+    if (!selectedCategoryId) {
+      alert("Please select a category first");
+      return;
+    }
+
+    if (products.length === 0) {
+      alert("Please upload an Excel file first");
+      return;
+    }
+
+    // Get external IDs from the uploaded Excel file
+    const externalIds = products.map((p) => p.external_id).filter((id) => id);
+
+    if (externalIds.length === 0) {
+      alert("No valid product IDs found in the uploaded file");
+      return;
+    }
+
+    const categoryName =
+      categories.find((c) => c.id === selectedCategoryId)?.name ||
+      "selected category";
+
+    if (
+      !confirm(
+        `This will add "${categoryName}" to ${externalIds.length} products from the uploaded file.\n\nProducts can have multiple categories - this won't remove existing categories.\n\nContinue?`
+      )
+    ) {
+      return;
+    }
+
+    setUpdatingCategory(true);
+    setUpdateResult(null);
+
+    try {
+      const response = await fetch("/api/admin/update-categories", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          categoryId: selectedCategoryId,
+          externalIds: externalIds,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Error updating categories");
+      } else {
+        setUpdateResult({ updated: data.updated, skipped: data.skipped || 0 });
+        if (data.updated === 0) {
+          alert(
+            data.message ||
+              "No products were updated. They may already have this category or don't exist in the database."
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      alert("An error occurred while updating categories");
+    } finally {
+      setUpdatingCategory(false);
+    }
   };
 
   const validCount = products.filter((p) => p.isValid && !p.isDuplicate).length;
@@ -446,6 +540,48 @@ export default function ImportProductsPage() {
               <p className="text-xs text-text-muted mt-1">
                 All imported products will be added to this category
               </p>
+            </div>
+
+            {/* Add category to existing products from uploaded file */}
+            <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+              <p className="text-xs text-blue-700 mb-2 font-medium">
+                📁 Add category to existing products from file
+              </p>
+              <p className="text-xs text-blue-600 mb-2">
+                Products can have multiple categories. This adds the selected
+                category without removing existing ones.
+              </p>
+              <Button
+                variant="outline"
+                onClick={handleUpdateExistingCategory}
+                disabled={
+                  updatingCategory ||
+                  !selectedCategoryId ||
+                  products.length === 0
+                }
+                className="w-full border-blue-300 text-blue-700 hover:bg-blue-100"
+              >
+                {updatingCategory ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  `Add Category (${products.length} products)`
+                )}
+              </Button>
+              {updateResult && (
+                <div className="text-xs mt-2">
+                  <p className="text-green-600">
+                    ✅ Added category to {updateResult.updated} products
+                  </p>
+                  {updateResult.skipped > 0 && (
+                    <p className="text-gray-500">
+                      ⏭️ {updateResult.skipped} already had this category
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>

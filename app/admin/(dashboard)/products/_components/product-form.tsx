@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,7 @@ export function ProductForm({
   const isEditing = !!product;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [currentCategoryId, setCurrentCategoryId] = useState<string>("");
 
   const [formData, setFormData] = useState({
     title: product?.title || "",
@@ -55,6 +56,26 @@ export function ProductForm({
     status: product?.status || "ACTIVE",
     category_id: "",
   });
+
+  // Fetch current category when editing
+  useEffect(() => {
+    if (isEditing && product) {
+      const fetchCurrentCategory = async () => {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("product_categories")
+          .select("category_id")
+          .eq("product_id", product.id)
+          .single();
+
+        if (data) {
+          setCurrentCategoryId(data.category_id);
+          setFormData((prev) => ({ ...prev, category_id: data.category_id }));
+        }
+      };
+      fetchCurrentCategory();
+    }
+  }, [isEditing, product]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +107,30 @@ export function ProductForm({
           .eq("id", product.id);
 
         if (updateError) throw updateError;
+
+        // Update category if changed
+        if (
+          formData.category_id &&
+          formData.category_id !== currentCategoryId
+        ) {
+          // Remove old category link
+          await supabase
+            .from("product_categories")
+            .delete()
+            .eq("product_id", product.id);
+
+          // Add new category link
+          await supabase.from("product_categories").insert({
+            product_id: product.id,
+            category_id: formData.category_id,
+          });
+        } else if (formData.category_id && !currentCategoryId) {
+          // Add category if none existed
+          await supabase.from("product_categories").insert({
+            product_id: product.id,
+            category_id: formData.category_id,
+          });
+        }
       } else {
         const { data: newProduct, error: insertError } = await supabase
           .from("products")
@@ -259,28 +304,26 @@ export function ProductForm({
               />
             </div>
 
-            {!isEditing && (
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <Select
-                  value={formData.category_id}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, category_id: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.icon} {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Select
+                value={formData.category_id}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, category_id: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.icon} {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>

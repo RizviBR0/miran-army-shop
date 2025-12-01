@@ -21,47 +21,97 @@ export async function ProductGrid({
   const supabase = await createClient();
   const itemsPerPage = 20;
 
-  // Build query - show both ACTIVE and DRAFT products
-  let query = supabase
-    .from("products")
-    .select("*")
-    .in("status", ["ACTIVE", "DRAFT"]);
+  let products: Product[] = [];
 
-  // Filter by search
-  if (searchQuery) {
-    query = query.ilike("title", `%${searchQuery}%`);
-  }
+  // If filtering by category, we need to join with product_categories
+  if (category) {
+    // First get the category ID from slug
+    const { data: categoryData } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("slug", category)
+      .single();
 
-  // Sort
-  if (sort === "price_asc") {
-    query = query.order("price", { ascending: true, nullsFirst: false });
-  } else if (sort === "price_desc") {
-    query = query.order("price", { ascending: false, nullsFirst: false });
-  } else if (sort === "trending") {
-    query = query.order("is_hot", { ascending: false }).order("created_at", { ascending: false });
+    if (categoryData) {
+      // Get product IDs for this category
+      const { data: productCategories } = await supabase
+        .from("product_categories")
+        .select("product_id")
+        .eq("category_id", categoryData.id);
+
+      if (productCategories && productCategories.length > 0) {
+        const productIds = productCategories.map((pc) => pc.product_id);
+
+        // Build query with product IDs filter
+        let query = supabase
+          .from("products")
+          .select("*")
+          .in("id", productIds)
+          .in("status", ["ACTIVE", "DRAFT"]);
+
+        // Filter by search
+        if (searchQuery) {
+          query = query.ilike("title", `%${searchQuery}%`);
+        }
+
+        // Sort
+        if (sort === "price_asc") {
+          query = query.order("price", { ascending: true, nullsFirst: false });
+        } else if (sort === "price_desc") {
+          query = query.order("price", { ascending: false, nullsFirst: false });
+        } else if (sort === "trending") {
+          query = query
+            .order("is_hot", { ascending: false })
+            .order("created_at", { ascending: false });
+        } else {
+          query = query.order("created_at", { ascending: false });
+        }
+
+        // Pagination
+        const from = (page - 1) * itemsPerPage;
+        const to = from + itemsPerPage - 1;
+        query = query.range(from, to);
+
+        const { data, error } = await query;
+        if (!error && data) {
+          products = data;
+        }
+      }
+    }
   } else {
-    // Default: newest first
-    query = query.order("created_at", { ascending: false });
-  }
+    // No category filter - get all products
+    let query = supabase
+      .from("products")
+      .select("*")
+      .in("status", ["ACTIVE", "DRAFT"]);
 
-  // Pagination
-  const from = (page - 1) * itemsPerPage;
-  const to = from + itemsPerPage - 1;
-  query = query.range(from, to);
+    // Filter by search
+    if (searchQuery) {
+      query = query.ilike("title", `%${searchQuery}%`);
+    }
 
-  const { data: products, error } = await query;
+    // Sort
+    if (sort === "price_asc") {
+      query = query.order("price", { ascending: true, nullsFirst: false });
+    } else if (sort === "price_desc") {
+      query = query.order("price", { ascending: false, nullsFirst: false });
+    } else if (sort === "trending") {
+      query = query
+        .order("is_hot", { ascending: false })
+        .order("created_at", { ascending: false });
+    } else {
+      query = query.order("created_at", { ascending: false });
+    }
 
-  if (error) {
-    console.error("Error fetching products:", error);
-    return (
-      <div className="text-center py-16">
-        <div className="text-6xl mb-4">😕</div>
-        <h3 className="text-xl font-heading font-semibold text-text-main mb-2">
-          Error loading products
-        </h3>
-        <p className="text-text-muted">Please try again later</p>
-      </div>
-    );
+    // Pagination
+    const from = (page - 1) * itemsPerPage;
+    const to = from + itemsPerPage - 1;
+    query = query.range(from, to);
+
+    const { data, error } = await query;
+    if (!error && data) {
+      products = data;
+    }
   }
 
   if (!products || products.length === 0) {
@@ -90,14 +140,18 @@ export async function ProductGrid({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-      {productsWithShipping.map((product: Product & { shipsToUser: boolean; hasFreeShipping: boolean }) => (
-        <ProductCard
-          key={product.id}
-          product={product as ProductWithDetails}
-          shipsToUser={product.shipsToUser}
-          hasFreeShipping={product.hasFreeShipping}
-        />
-      ))}
+      {productsWithShipping.map(
+        (
+          product: Product & { shipsToUser: boolean; hasFreeShipping: boolean }
+        ) => (
+          <ProductCard
+            key={product.id}
+            product={product as ProductWithDetails}
+            shipsToUser={product.shipsToUser}
+            hasFreeShipping={product.hasFreeShipping}
+          />
+        )
+      )}
     </div>
   );
 }
