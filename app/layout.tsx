@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { Fredoka, Nunito } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { getCurrentCountry } from "@/lib/location";
+
+const GA_MEASUREMENT_ID = "G-8Y2H6Q7LFW";
 
 const fredoka = Fredoka({
   subsets: ["latin"],
@@ -61,6 +64,20 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className={`${fredoka.variable} ${nunito.variable}`}>
+      <head>
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GA_MEASUREMENT_ID}');
+          `}
+        </Script>
+      </head>
       <body className="min-h-screen flex flex-col bg-bg-main font-body antialiased">
         <Navbar currentCountry={currentCountry} />
         <main className="flex-1">{children}</main>
