@@ -57,7 +57,6 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ success: true });
 
     // Set secure admin session cookie (24 hours)
-    // In production, use a proper JWT or signed token
     const sessionData = Buffer.from(
       JSON.stringify({
         id: adminUser.id,
@@ -67,9 +66,12 @@ export async function POST(request: Request) {
       })
     ).toString("base64");
 
+    // Determine if we're in production based on the request URL
+    const isProduction = request.url.startsWith("https://");
+
     response.cookies.set("miranarmy_admin_session", sessionData, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isProduction,
       sameSite: "lax",
       maxAge: 60 * 60 * 24, // 24 hours
       path: "/",

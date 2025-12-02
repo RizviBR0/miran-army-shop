@@ -27,6 +27,7 @@ interface Category {
   id: string;
   name: string;
   slug: string;
+  product_count?: number;
 }
 
 interface FilterBarProps {
@@ -88,19 +89,40 @@ export function FilterBar({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Fetch categories from database
+  // Fetch categories from database (only those with products)
   useEffect(() => {
     const fetchCategories = async () => {
       const supabase = createClient();
-      const { data } = await supabase
+
+      // Get categories with their product count
+      const { data: categoriesData } = await supabase
         .from("categories")
         .select("id, name, slug")
         .order("sort_order");
 
-      if (data) {
+      if (categoriesData) {
+        // Get product counts for each category
+        const { data: productCounts } = await supabase
+          .from("product_categories")
+          .select("category_id");
+
+        // Count products per category
+        const countMap = new Map<string, number>();
+        productCounts?.forEach((pc) => {
+          countMap.set(pc.category_id, (countMap.get(pc.category_id) || 0) + 1);
+        });
+
+        // Filter categories that have at least one product
+        const categoriesWithProducts = categoriesData
+          .filter((cat) => (countMap.get(cat.id) || 0) > 0)
+          .map((cat) => ({
+            ...cat,
+            product_count: countMap.get(cat.id) || 0,
+          }));
+
         setCategories([
           { id: "all", name: "All Categories", slug: "all" },
-          ...data,
+          ...categoriesWithProducts,
         ]);
       }
     };

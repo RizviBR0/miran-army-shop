@@ -128,6 +128,7 @@ export default function ImportProductsPage() {
     success: number;
     failed: number;
     skipped: number;
+    categoryAdded: number;
   } | null>(null);
 
   // Progress tracking
@@ -305,38 +306,40 @@ export default function ImportProductsPage() {
   };
 
   const handleImport = async () => {
-    // Category selection is optional for now (until migration is applied)
-    // if (!selectedCategoryId) {
-    //   alert("Please select a category for the products");
-    //   return;
-    // }
+    if (!selectedCategoryId) {
+      alert("Please select a category for the products");
+      return;
+    }
 
-    // Filter out duplicates and invalid products
-    const validProducts = products.filter((p) => p.isValid && !p.isDuplicate);
-    if (validProducts.length === 0) {
-      alert("No new valid products to import (duplicates are skipped)");
+    // Get new products (not duplicates) and duplicates separately
+    const newProducts = products.filter((p) => p.isValid && !p.isDuplicate);
+    const duplicateProducts = products.filter((p) => p.isDuplicate);
+
+    const totalToProcess = newProducts.length + duplicateProducts.length;
+
+    if (totalToProcess === 0) {
+      alert("No products to process");
       return;
     }
 
     setImporting(true);
     setImportResult(null);
     cancelRef.current = false;
-    setProgress({ current: 0, total: validProducts.length });
+    setProgress({ current: 0, total: totalToProcess });
 
     const supabase = createClient();
     let success = 0;
     let failed = 0;
-    let skipped = duplicateCount;
+    let skipped = 0;
+    let categoryAdded = 0;
 
-    for (let i = 0; i < validProducts.length; i++) {
-      // Check for cancellation
-      if (cancelRef.current) {
-        break;
-      }
+    // STEP 1: Import new products with the selected category
+    for (let i = 0; i < newProducts.length; i++) {
+      if (cancelRef.current) break;
 
-      const product = validProducts[i];
+      const product = newProducts[i];
       setCurrentProductName(product.title.substring(0, 40) + "...");
-      setProgress({ current: i + 1, total: validProducts.length });
+      setProgress({ current: i + 1, total: totalToProcess });
 
       // Double-check if product already exists (in case of concurrent imports)
       const { data: existing } = await supabase
@@ -346,8 +349,29 @@ export default function ImportProductsPage() {
         .single();
 
       if (existing) {
-        // Skip duplicate
-        skipped++;
+        // Product exists - treat as duplicate, add category if needed
+        const { data: existingCategory } = await supabase
+          .from("product_categories")
+          .select("product_id")
+          .eq("product_id", existing.id)
+          .eq("category_id", selectedCategoryId)
+          .single();
+
+        if (!existingCategory) {
+          // Add category to existing product
+          const { error: linkError } = await supabase
+            .from("product_categories")
+            .insert({
+              product_id: existing.id,
+              category_id: selectedCategoryId,
+            });
+
+          if (!linkError) {
+            categoryAdded++;
+          }
+        } else {
+          skipped++;
+        }
         continue;
       }
 
@@ -366,12 +390,12 @@ export default function ImportProductsPage() {
           currency: product.currency,
           discount_percent: product.discount_percent,
           sales_count: product.sales_count,
-          positive_feedback: product.rating * 20, // Convert 5-star back to percentage
+          positive_feedback: product.rating * 20,
           rating: product.rating,
           video_url: product.video_url || null,
           store_name: null,
           is_hot: product.sales_count > 1000,
-          is_featured: product.discount_percent >= 20, // Feature products with 20%+ discount
+          is_featured: product.discount_percent >= 20,
           status: "DRAFT",
           coupon_code: product.coupon_code || null,
           coupon_value: product.coupon_value || null,
@@ -385,29 +409,82 @@ export default function ImportProductsPage() {
         console.error("Error inserting product:", error);
         failed++;
       } else {
-        // Link product to category in junction table
-        if (selectedCategoryId) {
-          const { error: linkError } = await supabase
-            .from("product_categories")
-            .insert({
-              product_id: insertedProduct.id,
-              category_id: selectedCategoryId,
-            });
+        // Link product to category
+        const { error: linkError } = await supabase
+          .from("product_categories")
+          .insert({
+            product_id: insertedProduct.id,
+            category_id: selectedCategoryId,
+          });
 
-          if (linkError) {
-            console.error("Error linking product to category:", linkError);
-            // Product was inserted but category link failed - still count as success
-          }
+        if (linkError) {
+          console.error("Error linking product to category:", linkError);
         }
         success++;
       }
     }
 
-    setImportResult({ success, failed, skipped });
+    // STEP 2: For duplicate products, add the category if they don't already have it
+    for (let i = 0; i < duplicateProducts.length; i++) {
+      if (cancelRef.current) break;
+
+      const product = duplicateProducts[i];
+      setCurrentProductName(
+        `Adding category: ${product.title.substring(0, 30)}...`
+      );
+      setProgress({
+        current: newProducts.length + i + 1,
+        total: totalToProcess,
+      });
+
+      // Get the existing product
+      const { data: existingProduct } = await supabase
+        .from("products")
+        .select("id")
+        .eq("external_id", product.external_id)
+        .single();
+
+      if (!existingProduct) {
+        // Product doesn't exist (shouldn't happen, but handle it)
+        skipped++;
+        continue;
+      }
+
+      // Check if this product already has this specific category
+      const { data: existingCategory } = await supabase
+        .from("product_categories")
+        .select("product_id")
+        .eq("product_id", existingProduct.id)
+        .eq("category_id", selectedCategoryId)
+        .single();
+
+      if (existingCategory) {
+        // Already has this category
+        skipped++;
+        continue;
+      }
+
+      // Add the category to the existing product
+      const { error: linkError } = await supabase
+        .from("product_categories")
+        .insert({
+          product_id: existingProduct.id,
+          category_id: selectedCategoryId,
+        });
+
+      if (linkError) {
+        console.error("Error adding category to duplicate product:", linkError);
+        skipped++;
+      } else {
+        categoryAdded++;
+      }
+    }
+
+    setImportResult({ success, failed, skipped, categoryAdded });
     setImporting(false);
     setCurrentProductName("");
 
-    if (success > 0 && !cancelRef.current) {
+    if ((success > 0 || categoryAdded > 0) && !cancelRef.current) {
       setProducts([]);
       setFile(null);
     }
@@ -803,19 +880,33 @@ export default function ImportProductsPage() {
             {/* Import Result */}
             {importResult && (
               <div className="mt-4 p-4 rounded-lg bg-green-50 border border-green-200">
-                <p className="text-green-700 font-medium">
-                  ✅ Import complete: {importResult.success} products imported
+                <div className="text-green-700 font-medium">
+                  ✅ Import complete!
+                </div>
+                <ul className="text-sm mt-2 space-y-1">
+                  {importResult.success > 0 && (
+                    <li className="text-green-600">
+                      • {importResult.success} new products imported
+                    </li>
+                  )}
+                  {importResult.categoryAdded > 0 && (
+                    <li className="text-blue-600">
+                      • {importResult.categoryAdded} existing products got
+                      category added
+                    </li>
+                  )}
                   {importResult.skipped > 0 && (
-                    <span className="text-amber-600">
-                      , {importResult.skipped} skipped (duplicates)
-                    </span>
+                    <li className="text-amber-600">
+                      • {importResult.skipped} skipped (already had this
+                      category)
+                    </li>
                   )}
                   {importResult.failed > 0 && (
-                    <span className="text-red-600">
-                      , {importResult.failed} failed
-                    </span>
+                    <li className="text-red-600">
+                      • {importResult.failed} failed
+                    </li>
                   )}
-                </p>
+                </ul>
               </div>
             )}
 
@@ -863,15 +954,17 @@ export default function ImportProductsPage() {
             )}
 
             {/* Import Button */}
-            {products.length > 0 && validCount > 0 && (
+            {products.length > 0 && (
               <div className="mt-6 flex justify-between items-center">
                 <div>
                   <p className="text-sm text-gray-500">
-                    Products will be imported as <strong>DRAFT</strong> status
+                    New products will be imported as <strong>DRAFT</strong>{" "}
+                    status
                   </p>
                   {duplicatesInList > 0 && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      {duplicatesInList} duplicate(s) will be skipped
+                    <p className="text-xs text-blue-600 mt-1">
+                      📁 {duplicatesInList} duplicate(s) will get the selected
+                      category added
                     </p>
                   )}
                 </div>
@@ -894,12 +987,12 @@ export default function ImportProductsPage() {
                     {importing ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Importing... ({progress.current}/{progress.total})
+                        Processing... ({progress.current}/{progress.total})
                       </>
                     ) : (
                       <>
                         <Upload className="h-4 w-4 mr-2" />
-                        Import {validCount} Products
+                        Import & Add Category ({products.length})
                       </>
                     )}
                   </Button>
