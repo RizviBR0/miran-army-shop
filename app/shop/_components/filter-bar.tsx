@@ -45,17 +45,7 @@ const sortOptions = [
   { value: "rating", label: "Best Rated" },
 ];
 
-const categoryEmojis: Record<string, string> = {
-  all: "🛍️",
-  clothing: "👕",
-  accessories: "💍",
-  electronics: "📱",
-  home: "🏠",
-  beauty: "💄",
-  toys: "🧸",
-  sports: "⚽",
-  default: "📦",
-};
+// Category emojis removed for cleaner UI
 
 export function FilterBar({
   currentCountry,
@@ -179,10 +169,6 @@ export function FilterBar({
     window.location.reload();
   };
 
-  const getCategoryEmoji = (slug: string) => {
-    return categoryEmojis[slug] || categoryEmojis.default;
-  };
-
   const showCompact = isScrolled && !isExpanded && !isFocused;
 
   return (
@@ -287,10 +273,7 @@ export function FilterBar({
                         value={cat.slug}
                         className="rounded"
                       >
-                        <span className="flex items-center gap-2">
-                          <span>{getCategoryEmoji(cat.slug)}</span>
-                          <span>{cat.name}</span>
-                        </span>
+                        {cat.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -316,10 +299,7 @@ export function FilterBar({
                         value={country.code}
                         className="rounded"
                       >
-                        <span className="flex items-center gap-2">
-                          <span>{country.flag}</span>
-                          <span>{country.name}</span>
-                        </span>
+                        {country.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -360,14 +340,13 @@ export function FilterBar({
                   key={cat.id}
                   onClick={() => updateFilters({ category: cat.slug })}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5",
+                    "px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
                     selectedCategory === cat.slug
                       ? "bg-brand-yellow text-brand-black"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   )}
                 >
-                  <span>{getCategoryEmoji(cat.slug)}</span>
-                  <span>{cat.name}</span>
+                  {cat.name}
                 </button>
               ))}
             </div>

@@ -90,8 +90,7 @@ export function Navbar({ currentCountry = "US" }: NavbarProps) {
                   className="gap-1.5 text-gray-700 hover:text-gray-900 hover:bg-gray-100"
                 >
                   <Globe className="h-4 w-4" />
-                  <span className="hidden sm:inline">{country.flag}</span>
-                  <span className="hidden lg:inline text-sm">
+                  <span className="hidden sm:inline text-sm">
                     {country.name}
                   </span>
                   <ChevronDown className="h-3 w-3 opacity-50" />
@@ -106,12 +105,11 @@ export function Navbar({ currentCountry = "US" }: NavbarProps) {
                     key={c.code}
                     onClick={() => handleCountryChange(c.code)}
                     className={cn(
-                      "flex items-center gap-2 cursor-pointer",
+                      "cursor-pointer",
                       c.code === country.code && "bg-brand-yellow/10"
                     )}
                   >
-                    <span>{c.flag}</span>
-                    <span>{c.name}</span>
+                    {c.name}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>

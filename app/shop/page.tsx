@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { ShopHeader } from "./_components/shop-header";
 import { FeaturedBanner } from "./_components/featured-banner";
 import { FilterBar } from "./_components/filter-bar";
-import { ProductGrid } from "./_components/product-grid";
+import { ProductGridWrapper } from "./_components/product-grid-wrapper";
 import { TrendingSection } from "./_components/trending-section";
 import { BestRatedSection } from "./_components/best-rated-section";
 import { ProductGridSkeleton } from "./_components/product-grid-skeleton";
@@ -14,7 +14,6 @@ interface ShopPageProps {
     search?: string;
     category?: string;
     sort?: string;
-    page?: string;
   }>;
 }
 
@@ -107,13 +106,12 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
           </div>
         </div>
 
-        <Suspense fallback={<ProductGridSkeleton />}>
-          <ProductGrid
+        <Suspense fallback={<ProductGridSkeleton count={12} />}>
+          <ProductGridWrapper
             currentCountry={currentCountry}
             searchQuery={params.search}
             category={params.category}
             sort={params.sort}
-            page={params.page ? parseInt(params.page) : 1}
           />
         </Suspense>
       </section>
