@@ -265,10 +265,10 @@ export default function HomePage() {
                 variants={fadeInUp}
                 className="font-heading text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-brand-black mb-6 leading-tight"
               >
-                Approved by the
+                Discover the Best
                 <br />
                 <span className="relative inline-block">
-                  <span className="relative z-10">Queen of Expressions</span>
+                  <span className="relative z-10">Deals & Steals</span>
                   <span className="absolute bottom-2 left-0 right-0 h-4 bg-brand-yellow/50 -z-0 -rotate-1" />
                 </span>
               </motion.h1>
@@ -278,8 +278,8 @@ export default function HomePage() {
                 variants={fadeInUp}
                 className="mx-auto max-w-2xl text-lg md:text-xl text-text-muted mb-10"
               >
-                From viral squishy lamps to aesthetic baby fits. We curate the
-                cutest finds loved by the Miran Army.
+                Handpicked viral products at unbeatable prices. Shop trending
+                finds curated just for the Miran Army.
               </motion.p>
 
               {/* CTA Buttons */}
@@ -299,7 +299,7 @@ export default function HomePage() {
                   className="text-base px-8 py-6"
                   onClick={scrollToSocial}
                 >
-                  Join the Family
+                  Join the Fan Family
                 </Button>
               </motion.div>
             </AnimatedSection>
@@ -591,7 +591,7 @@ export default function HomePage() {
               >
                 Join the{" "}
                 <span className="text-brand-yellow relative">
-                  Family
+                  Fan Family
                   <svg
                     className="absolute -bottom-2 left-0 w-full"
                     viewBox="0 0 200 12"
